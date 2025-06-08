@@ -2,323 +2,393 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { vapi } from "@/lib/vapi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 const GenerateProgramPage = () => {
-  const [callActive, setCallActive] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [callEnded, setCallEnded] = useState(false);
-
   const { user } = useUser();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState({
+    age: '',
+    weight: '',
+    height: '',
+    injuries: '',
+    fitness_goal: '',
+    workout_days: '',
+    fitness_level: '',
+    dietary_restrictions: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+
   const router = useRouter();
 
-  const messageContainerRef = useRef<HTMLDivElement>(null);
-
-  // SOLUTION to get rid of "Meeting has ended" error
-  useEffect(() => {
-    const originalError = console.error;
-    // override console.error to ignore "Meeting has ended" errors
-    console.error = function (msg, ...args) {
-      if (
-        msg &&
-        (msg.includes("Meeting has ended") ||
-          (args[0] && args[0].toString().includes("Meeting has ended")))
-      ) {
-        console.log("Ignoring known error: Meeting has ended");
-        return; // don't pass to original handler
+  const questions = [
+    {
+      id: 'age',
+      title: 'What is your age?',
+      type: 'number',
+      placeholder: 'Enter your age',
+      validation: (value) => {
+        const age = parseInt(value);
+        if (!age || age < 13 || age > 100) return 'Please enter a valid age between 13 and 100';
+        return null;
       }
-
-      // pass all other errors to the original handler
-      return originalError.call(console, msg, ...args);
-    };
-
-    // restore original handler on unmount
-    return () => {
-      console.error = originalError;
-    };
-  }, []);
-
-  // auto-scroll messages
-  useEffect(() => {
-    if (messageContainerRef.current) {
-      messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  // navigate user to profile page after the call ends
-  useEffect(() => {
-    if (callEnded) {
-      const redirectTimer = setTimeout(() => {
-        router.push("/profile");
-      }, 1500);
-
-      return () => clearTimeout(redirectTimer);
-    }
-  }, [callEnded, router]);
-
-  // setup event listeners for vapi
-  useEffect(() => {
-    const handleCallStart = () => {
-      console.log("Call started");
-      setConnecting(false);
-      setCallActive(true);
-      setCallEnded(false);
-    };
-
-    const handleCallEnd = () => {
-      console.log("Call ended");
-      setCallActive(false);
-      setConnecting(false);
-      setIsSpeaking(false);
-      setCallEnded(true);
-    };
-
-    const handleSpeechStart = () => {
-      console.log("AI started Speaking");
-      setIsSpeaking(true);
-    };
-
-    const handleSpeechEnd = () => {
-      console.log("AI stopped Speaking");
-      setIsSpeaking(false);
-    };
-    const handleMessage = (message: any) => {
-      if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = { content: message.transcript, role: message.role };
-        setMessages((prev) => [...prev, newMessage]);
+    },
+    {
+      id: 'weight',
+      title: 'What is your current weight?',
+      subtitle: 'This helps us calculate your BMI and recommend appropriate exercises',
+      type: 'number',
+      placeholder: 'Enter your weight in kg',
+      validation: (value) => {
+        const weight = parseFloat(value);
+        if (!weight || weight < 30 || weight > 300) return 'Please enter a valid weight between 30-300 kg';
+        return null;
       }
-    };
+    },
+    {
+      id: 'height',
+      title: 'What is your height?',
+      subtitle: 'This helps us calculate your BMI accurately',
+      type: 'number',
+      placeholder: 'Enter your height in cm',
+      validation: (value) => {
+        const height = parseFloat(value);
+        if (!height || height < 100 || height > 250) return 'Please enter a valid height between 100-250 cm';
+        return null;
+      }
+    },
+    {
+      id: 'injuries',
+      title: 'Do you have any existing injuries or physical limitations?',
+      subtitle: 'We\'ll customize your program to work around any limitations',
+      type: 'textarea',
+      placeholder: 'Describe any injuries, joint issues, or physical limitations (or write "None" if you have no injuries)',
+      validation: (value) => {
+        if (!value || value.trim().length < 2) return 'Please provide information about injuries or write "None"';
+        return null;
+      }
+    },
+    {
+      id: 'fitness_goal',
+      title: 'What is your primary fitness goal?',
+      type: 'select',
+      options: [
+        { value: 'muscle_gain', label: 'Gaining Muscle' },
+        { value: 'weight_loss', label: 'Losing Weight' },
+        { value: 'general_fitness', label: 'General Fitness & Health' },
+        { value: 'strength', label: 'Building Strength' },
+        { value: 'endurance', label: 'Improving Endurance' }
+      ],
+      validation: (value) => {
+        if (!value) return 'Please select your primary fitness goal';
+        return null;
+      }
+    },
+    {
+      id: 'workout_days',
+      title: 'How many days per week can you exercise?',
+      type: 'select',
+      options: [
+        { value: '2', label: '2 days per week' },
+        { value: '3', label: '3 days per week' },
+        { value: '4', label: '4 days per week' },
+        { value: '5', label: '5 days per week' },
+        { value: '6', label: '6 days per week' },
+        { value: '7', label: '7 days per week' }
+      ],
+      validation: (value) => {
+        if (!value) return 'Please select how many days you can workout';
+        return null;
+      }
+    },
+    {
+      id: 'fitness_level',
+      title: 'What is your current fitness level?',
+      type: 'select',
+      options: [
+        { value: 'beginner', label: 'Beginner - New to exercise or returning after a long break' },
+        { value: 'intermediate', label: 'Intermediate - Regular exercise for 6+ months' },
+        { value: 'advanced', label: 'Advanced - Consistent training for 2+ years' }
+      ],
+      validation: (value) => {
+        if (!value) return 'Please select your fitness level';
+        return null;
+      }
+    },
+    {
+      id: 'dietary_restrictions',
+      title: 'Do you have any dietary restrictions or preferences?',
+      subtitle: 'This helps us create a nutrition plan that works for you',
+      type: 'textarea',
+      placeholder: 'List any allergies, dietary restrictions, or food preferences (vegetarian, vegan, gluten-free, etc.) or write "None"',
+      validation: (value) => {
+        if (!value || value.trim().length < 2) return 'Please provide dietary information or write "None"';
+        return null;
+      }
+    }
+  ];
 
-    const handleError = (error: any) => {
-      console.log("Vapi Error", error);
-      setConnecting(false);
-      setCallActive(false);
-    };
+  const currentQuestion = questions[currentStep];
+  const isLastStep = currentStep === questions.length - 1;
 
-    vapi
-      .on("call-start", handleCallStart)
-      .on("call-end", handleCallEnd)
-      .on("speech-start", handleSpeechStart)
-      .on("speech-end", handleSpeechEnd)
-      .on("message", handleMessage)
-      .on("error", handleError);
+  const validateStep = () => {
+    const question = questions[currentStep];
+    const value = formData[question.id];
+    const error = question.validation(value);
+    
+    if (error) {
+      setErrors({ [question.id]: error });
+      return false;
+    }
+    
+    setErrors({});
+    return true;
+  };
 
-    // cleanup event listeners on unmount
-    return () => {
-      vapi
-        .off("call-start", handleCallStart)
-        .off("call-end", handleCallEnd)
-        .off("speech-start", handleSpeechStart)
-        .off("speech-end", handleSpeechEnd)
-        .off("message", handleMessage)
-        .off("error", handleError);
-    };
-  }, []);
-
-  const toggleCall = async () => {
-    if (callActive) vapi.stop();
-    else {
-      try {
-        setConnecting(true);
-        setMessages([]);
-        setCallEnded(false);
-
-        const fullName = user?.firstName
-          ? `${user.firstName} ${user.lastName || ""}`.trim()
-          : "There";
-
-        await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-          variableValues: {
-            full_name: fullName,
-            user_id: user?.id,
-          },
-        });
-      } catch (error) {
-        console.log("Failed to start call", error);
-        setConnecting(false);
+  const handleNext = () => {
+    if (validateStep()) {
+      if (isLastStep) {
+        handleSubmit();
+      } else {
+        setCurrentStep(prev => prev + 1);
       }
     }
   };
 
+  const handlePrevious = () => {
+    setCurrentStep(prev => Math.max(0, prev - 1));
+    setErrors({});
+  };
+
+  const handleInputChange = (value) => {
+    setFormData(prev => ({
+      ...prev,
+      [currentQuestion.id]: value
+    }));
+    // Clear error when user starts typing
+    if (errors[currentQuestion.id]) {
+      setErrors(prev => ({ ...prev, [currentQuestion.id]: null }));
+    }
+  };
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+    
+    if (!user) {
+      alert('Please sign in to generate your fitness program');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      console.log('Submitting fitness program data:', formData);
+      
+      // Now this should work with CORS headers added to your Convex endpoint
+      const response = await fetch('https://glorious-ptarmigan-360.convex.site/vapi/generate-program', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          age: parseInt(formData.age),
+          height: parseFloat(formData.height),
+          weight: parseFloat(formData.weight),
+          injuries: formData.injuries,
+          workout_days: parseInt(formData.workout_days),
+          fitness_goal: formData.fitness_goal,
+          fitness_level: formData.fitness_level,
+          dietary_restrictions: formData.dietary_restrictions,
+        }),
+      });
+  
+      console.log('API Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error(errorData.error || `API Error (${response.status})`);
+      }
+  
+      const result = await response.json();
+      console.log('API Result:', result);
+  
+      if (result.success) {
+        console.log('Program generated successfully:', result.data);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        router.push("/profile");
+      } else {
+        throw new Error(result.error || 'Failed to generate program');
+      }
+      
+    } catch (error) {
+      console.error('Error generating program:', error);
+      alert(`Failed to generate your fitness program: ${error.message}. Please try again.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderInput = () => {
+    const { type, placeholder, options } = currentQuestion;
+    const value = formData[currentQuestion.id];
+    const error = errors[currentQuestion.id];
+
+    switch (type) {
+      case 'select':
+        return (
+          <div className="space-y-3">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleInputChange(option.value)}
+                className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${
+                  value === option.value
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-card hover:border-primary/50'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+            {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+          </div>
+        );
+      
+      case 'textarea':
+        return (
+          <div>
+            <textarea
+              value={value}
+              onChange={(e) => handleInputChange(e.target.value)}
+              placeholder={placeholder}
+              className={`w-full p-4 rounded-lg border-2 bg-card resize-none min-h-[120px] transition-colors ${
+                error ? 'border-destructive' : 'border-border focus:border-primary'
+              } focus:outline-none`}
+            />
+            {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+          </div>
+        );
+      
+      default:
+        return (
+          <div>
+            <input
+              type={type}
+              value={value}
+              onChange={(e) => handleInputChange(e.target.value)}
+              placeholder={placeholder}
+              className={`w-full p-4 rounded-lg border-2 bg-card text-lg transition-colors ${
+                error ? 'border-destructive' : 'border-border focus:border-primary'
+              } focus:outline-none`}
+            />
+            {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+          </div>
+        );
+    }
+  };
+
+  if (isSubmitting) {
+    return (
+      <div className="flex flex-col min-h-screen text-foreground items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold mb-2">Generating Your Program</h2>
+          <p className="text-muted-foreground">Creating your personalized fitness and nutrition plan...</p>
+          <p className="text-sm text-muted-foreground mt-2">This may take a few moments...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col min-h-screen text-foreground overflow-hidden  pb-6 pt-24">
-      <div className="container mx-auto px-4 h-full max-w-5xl">
-        {/* Title */}
+    <div className="flex flex-col min-h-screen text-foreground overflow-hidden pb-6 pt-24">
+      <div className="container mx-auto px-4 h-full max-w-3xl">
+        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold font-mono">
             <span>Generate Your </span>
             <span className="text-primary uppercase">Fitness Program</span>
           </h1>
           <p className="text-muted-foreground mt-2">
-            Have a voice conversation with our AI assistant to create your personalized plan
+            Answer a few questions to create your personalized fitness and nutrition plan
           </p>
         </div>
 
-        {/* VIDEO CALL AREA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* AI ASSISTANT CARD */}
-          <Card className="bg-card/90 backdrop-blur-sm border border-border overflow-hidden relative">
-            <div className="aspect-video flex flex-col items-center justify-center p-6 relative">
-              {/* AI VOICE ANIMATION */}
-              <div
-                className={`absolute inset-0 ${
-                  isSpeaking ? "opacity-30" : "opacity-0"
-                } transition-opacity duration-300`}
-              >
-                {/* Voice wave animation when speaking */}
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 flex justify-center items-center h-20">
-                  {[...Array(5)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`mx-1 h-16 w-1 bg-primary rounded-full ${
-                        isSpeaking ? "animate-sound-wave" : ""
-                      }`}
-                      style={{
-                        animationDelay: `${i * 0.1}s`,
-                        height: isSpeaking ? `${Math.random() * 50 + 20}%` : "5%",
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* AI IMAGE */}
-              <div className="relative size-32 mb-4">
-                <div
-                  className={`absolute inset-0 bg-primary opacity-10 rounded-full blur-lg ${
-                    isSpeaking ? "animate-pulse" : ""
-                  }`}
-                />
-
-                <div className="relative w-full h-full rounded-full bg-card flex items-center justify-center border border-border overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-secondary/10"></div>
-                  <img
-                    src="/ai-avatar.png"
-                    alt="AI Assistant"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-
-              <h2 className="text-xl font-bold text-foreground">CodeFlex AI</h2>
-              <p className="text-sm text-muted-foreground mt-1">Fitness & Diet Coach</p>
-
-              {/* SPEAKING INDICATOR */}
-
-              <div
-                className={`mt-4 flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border ${
-                  isSpeaking ? "border-primary" : ""
-                }`}
-              >
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isSpeaking ? "bg-primary animate-pulse" : "bg-muted"
-                  }`}
-                />
-
-                <span className="text-xs text-muted-foreground">
-                  {isSpeaking
-                    ? "Speaking..."
-                    : callActive
-                      ? "Listening..."
-                      : callEnded
-                        ? "Redirecting to profile..."
-                        : "Waiting..."}
-                </span>
-              </div>
-            </div>
-          </Card>
-
-          {/* USER CARD */}
-          <Card className={`bg-card/90 backdrop-blur-sm border overflow-hidden relative`}>
-            <div className="aspect-video flex flex-col items-center justify-center p-6 relative">
-              {/* User Image */}
-              <div className="relative size-32 mb-4">
-                <img
-                  src={user?.imageUrl}
-                  alt="User"
-                  // ADD THIS "size-full" class to make it rounded on all images
-                  className="size-full object-cover rounded-full"
-                />
-              </div>
-
-              <h2 className="text-xl font-bold text-foreground">You</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {user ? (user.firstName + " " + (user.lastName || "")).trim() : "Guest"}
-              </p>
-
-              {/* User Ready Text */}
-              <div className={`mt-4 flex items-center gap-2 px-3 py-1 rounded-full bg-card border`}>
-                <div className={`w-2 h-2 rounded-full bg-muted`} />
-                <span className="text-xs text-muted-foreground">Ready</span>
-              </div>
-            </div>
-          </Card>
+        {/* Progress Bar */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-muted-foreground">Question {currentStep + 1} of {questions.length}</span>
+            <span className="text-sm text-muted-foreground">{Math.round(((currentStep + 1) / questions.length) * 100)}%</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2">
+            <div 
+              className="bg-primary h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${((currentStep + 1) / questions.length) * 100}%` }}
+            ></div>
+          </div>
         </div>
 
-        {/* MESSAGE COINTER  */}
-        {messages.length > 0 && (
-          <div
-            ref={messageContainerRef}
-            className="w-full bg-card/90 backdrop-blur-sm border border-border rounded-xl p-4 mb-8 h-64 overflow-y-auto transition-all duration-300 scroll-smooth"
-          >
-            <div className="space-y-3">
-              {messages.map((msg, index) => (
-                <div key={index} className="message-item animate-fadeIn">
-                  <div className="font-semibold text-xs text-muted-foreground mb-1">
-                    {msg.role === "assistant" ? "CodeFlex AI" : "You"}:
-                  </div>
-                  <p className="text-foreground">{msg.content}</p>
-                </div>
-              ))}
-
-              {callEnded && (
-                <div className="message-item animate-fadeIn">
-                  <div className="font-semibold text-xs text-primary mb-1">System:</div>
-                  <p className="text-foreground">
-                    Your fitness program has been created! Redirecting to your profile...
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* CALL CONTROLS */}
-        <div className="w-full flex justify-center gap-4">
-          <Button
-            className={`w-40 text-xl rounded-3xl ${
-              callActive
-                ? "bg-destructive hover:bg-destructive/90"
-                : callEnded
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-primary hover:bg-primary/90"
-            } text-white relative`}
-            onClick={toggleCall}
-            disabled={connecting || callEnded}
-          >
-            {connecting && (
-              <span className="absolute inset-0 rounded-full animate-ping bg-primary/50 opacity-75"></span>
+        {/* Question Card */}
+        <Card className="bg-card/90 backdrop-blur-sm border border-border p-8 mb-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-2">{currentQuestion.title}</h2>
+            {currentQuestion.subtitle && (
+              <p className="text-muted-foreground">{currentQuestion.subtitle}</p>
             )}
+          </div>
 
-            <span>
-              {callActive
-                ? "End Call"
-                : connecting
-                  ? "Connecting..."
-                  : callEnded
-                    ? "View Profile"
-                    : "Start Call"}
-            </span>
+          {renderInput()}
+        </Card>
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between gap-4">
+          <Button
+            variant="outline"
+            onClick={handlePrevious}
+            disabled={currentStep === 0}
+            className="px-8 py-3"
+          >
+            ← Previous
+          </Button>
+
+          <Button
+            onClick={handleNext}
+            className="px-8 py-3 bg-primary hover:bg-primary/90"
+          >
+            {isLastStep ? 'Generate Program →' : 'Next →'}
           </Button>
         </div>
+
+        {/* Summary Preview */}
+        {currentStep > 0 && (
+          <Card className="bg-muted/50 border border-border p-4 mt-8">
+            <h3 className="font-semibold mb-3 text-sm uppercase tracking-wide">Your Answers So Far:</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              {questions.slice(0, currentStep).map((q, index) => {
+                const value = formData[q.id];
+                const displayValue = q.options 
+                  ? q.options.find(opt => opt.value === value)?.label || value
+                  : value;
+                
+                return (
+                  <div key={q.id} className="flex justify-between">
+                    <span className="text-muted-foreground">{q.title.replace('?', '')}:</span>
+                    <span className="font-medium text-right max-w-[200px] truncate" title={displayValue}>
+                      {displayValue}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
 };
+
 export default GenerateProgramPage;

@@ -9,6 +9,13 @@ const http = httpRouter();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
+// CORS headers for browser requests
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*", // or specify your domain like "https://yourdomain.com"
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 http.route({
   path: "/clerk-webhook",
   method: "POST",
@@ -119,6 +126,18 @@ function validateDietPlan(plan: any) {
   return validatedPlan;
 }
 
+// Handle OPTIONS requests for CORS preflight
+http.route({
+  path: "/vapi/generate-program",
+  method: "OPTIONS",
+  handler: httpAction(async (ctx, request) => {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }),
+});
+
 http.route({
   path: "/vapi/generate-program",
   method: "POST",
@@ -208,9 +227,9 @@ http.route({
         
         As a professional nutrition coach:
         - Calculate appropriate daily calorie intake based on the person's stats and goals
+        - Consider meal timing around workouts for optimal performance and recovery
         - Create a balanced meal plan with proper macronutrient distribution
         - Include a variety of nutrient-dense foods while respecting dietary restrictions
-        - Consider meal timing around workouts for optimal performance and recovery
         
         CRITICAL SCHEMA INSTRUCTIONS:
         - Your output MUST contain ONLY the fields specified below, NO ADDITIONAL FIELDS
@@ -263,7 +282,10 @@ http.route({
         }),
         {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            ...corsHeaders  // Add CORS headers to the response
+          },
         }
       );
     } catch (error) {
@@ -275,7 +297,10 @@ http.route({
         }),
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            ...corsHeaders  // Add CORS headers to error responses too
+          },
         }
       );
     }
