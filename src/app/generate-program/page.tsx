@@ -1,15 +1,52 @@
 "use client";
 
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const GenerateProgramPage = () => {
+interface FormData {
+  age: string;
+  weight: string;
+  height: string;
+  injuries: string;
+  fitness_goal: string;
+  workout_days: string;
+  fitness_level: string;
+  dietary_restrictions: string;
+}
+
+interface FormErrors {
+  [key: string]: string | null;
+}
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+interface Question {
+  id: keyof FormData;
+  title: string;
+  subtitle?: string;
+  type: 'number' | 'textarea' | 'select';
+  placeholder?: string;
+  options?: SelectOption[];
+  validation: (value: string) => string | null;
+}
+
+interface ApiResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+const GenerateProgramPage = (): React.ReactElement => {
   const { user } = useUser();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState({
+  const [currentStep, setCurrentStep] = useState<number>(0);
+  const [formData, setFormData] = useState<FormData>({
     age: '',
     weight: '',
     height: '',
@@ -19,19 +56,19 @@ const GenerateProgramPage = () => {
     fitness_level: '',
     dietary_restrictions: ''
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const router = useRouter();
 
-  const questions = [
+  const questions: Question[] = [
     {
       id: 'age',
       title: 'What is your age?',
       type: 'number',
       placeholder: 'Enter your age',
-      validation: (value) => {
-        const age = parseInt(value);
+      validation: (value: string): string | null => {
+        const age = parseInt(value, 10);
         if (!age || age < 13 || age > 100) return 'Please enter a valid age between 13 and 100';
         return null;
       }
@@ -42,7 +79,7 @@ const GenerateProgramPage = () => {
       subtitle: 'This helps us calculate your BMI and recommend appropriate exercises',
       type: 'number',
       placeholder: 'Enter your weight in kg',
-      validation: (value) => {
+      validation: (value: string): string | null => {
         const weight = parseFloat(value);
         if (!weight || weight < 30 || weight > 300) return 'Please enter a valid weight between 30-300 kg';
         return null;
@@ -54,7 +91,7 @@ const GenerateProgramPage = () => {
       subtitle: 'This helps us calculate your BMI accurately',
       type: 'number',
       placeholder: 'Enter your height in cm',
-      validation: (value) => {
+      validation: (value: string): string | null => {
         const height = parseFloat(value);
         if (!height || height < 100 || height > 250) return 'Please enter a valid height between 100-250 cm';
         return null;
@@ -66,7 +103,7 @@ const GenerateProgramPage = () => {
       subtitle: 'We\'ll customize your program to work around any limitations',
       type: 'textarea',
       placeholder: 'Describe any injuries, joint issues, or physical limitations (or write "None" if you have no injuries)',
-      validation: (value) => {
+      validation: (value: string): string | null => {
         if (!value || value.trim().length < 2) return 'Please provide information about injuries or write "None"';
         return null;
       }
@@ -82,7 +119,7 @@ const GenerateProgramPage = () => {
         { value: 'strength', label: 'Building Strength' },
         { value: 'endurance', label: 'Improving Endurance' }
       ],
-      validation: (value) => {
+      validation: (value: string): string | null => {
         if (!value) return 'Please select your primary fitness goal';
         return null;
       }
@@ -99,7 +136,7 @@ const GenerateProgramPage = () => {
         { value: '6', label: '6 days per week' },
         { value: '7', label: '7 days per week' }
       ],
-      validation: (value) => {
+      validation: (value: string): string | null => {
         if (!value) return 'Please select how many days you can workout';
         return null;
       }
@@ -113,7 +150,7 @@ const GenerateProgramPage = () => {
         { value: 'intermediate', label: 'Intermediate - Regular exercise for 6+ months' },
         { value: 'advanced', label: 'Advanced - Consistent training for 2+ years' }
       ],
-      validation: (value) => {
+      validation: (value: string): string | null => {
         if (!value) return 'Please select your fitness level';
         return null;
       }
@@ -124,7 +161,7 @@ const GenerateProgramPage = () => {
       subtitle: 'This helps us create a nutrition plan that works for you',
       type: 'textarea',
       placeholder: 'List any allergies, dietary restrictions, or food preferences (vegetarian, vegan, gluten-free, etc.) or write "None"',
-      validation: (value) => {
+      validation: (value: string): string | null => {
         if (!value || value.trim().length < 2) return 'Please provide dietary information or write "None"';
         return null;
       }
@@ -134,7 +171,7 @@ const GenerateProgramPage = () => {
   const currentQuestion = questions[currentStep];
   const isLastStep = currentStep === questions.length - 1;
 
-  const validateStep = () => {
+  const validateStep = (): boolean => {
     const question = questions[currentStep];
     const value = formData[question.id];
     const error = question.validation(value);
@@ -148,22 +185,22 @@ const GenerateProgramPage = () => {
     return true;
   };
 
-  const handleNext = () => {
+  const handleNext = (): void => {
     if (validateStep()) {
       if (isLastStep) {
-        handleSubmit();
+        void handleSubmit();
       } else {
         setCurrentStep(prev => prev + 1);
       }
     }
   };
 
-  const handlePrevious = () => {
+  const handlePrevious = (): void => {
     setCurrentStep(prev => Math.max(0, prev - 1));
     setErrors({});
   };
 
-  const handleInputChange = (value) => {
+  const handleInputChange = (value: string): void => {
     setFormData(prev => ({
       ...prev,
       [currentQuestion.id]: value
@@ -173,7 +210,8 @@ const GenerateProgramPage = () => {
       setErrors(prev => ({ ...prev, [currentQuestion.id]: null }));
     }
   };
-  const handleSubmit = async () => {
+
+  const handleSubmit = async (): Promise<void> => {
     if (!validateStep()) return;
     
     if (!user) {
@@ -186,7 +224,6 @@ const GenerateProgramPage = () => {
     try {
       console.log('Submitting fitness program data:', formData);
       
-      // Now this should work with CORS headers added to your Convex endpoint
       const response = await fetch('https://glorious-ptarmigan-360.convex.site/vapi/generate-program', {
         method: 'POST',
         headers: {
@@ -194,11 +231,11 @@ const GenerateProgramPage = () => {
         },
         body: JSON.stringify({
           user_id: user.id,
-          age: parseInt(formData.age),
+          age: parseInt(formData.age, 10),
           height: parseFloat(formData.height),
           weight: parseFloat(formData.weight),
           injuries: formData.injuries,
-          workout_days: parseInt(formData.workout_days),
+          workout_days: parseInt(formData.workout_days, 10),
           fitness_goal: formData.fitness_goal,
           fitness_level: formData.fitness_level,
           dietary_restrictions: formData.dietary_restrictions,
@@ -208,17 +245,17 @@ const GenerateProgramPage = () => {
       console.log('API Response status:', response.status);
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json() as ApiResponse;
         console.error('API Error:', errorData);
         throw new Error(errorData.error || `API Error (${response.status})`);
       }
   
-      const result = await response.json();
+      const result = await response.json() as ApiResponse;
       console.log('API Result:', result);
   
       if (result.success) {
         console.log('Program generated successfully:', result.data);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise<void>(resolve => setTimeout(resolve, 1000));
         router.push("/profile");
       } else {
         throw new Error(result.error || 'Failed to generate program');
@@ -226,13 +263,14 @@ const GenerateProgramPage = () => {
       
     } catch (error) {
       console.error('Error generating program:', error);
-      alert(`Failed to generate your fitness program: ${error.message}. Please try again.`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to generate your fitness program: ${errorMessage}. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const renderInput = () => {
+  const renderInput = (): React.ReactElement => {
     const { type, placeholder, options } = currentQuestion;
     const value = formData[currentQuestion.id];
     const error = errors[currentQuestion.id];
@@ -241,9 +279,10 @@ const GenerateProgramPage = () => {
       case 'select':
         return (
           <div className="space-y-3">
-            {options.map((option) => (
+            {options?.map((option) => (
               <button
                 key={option.value}
+                type="button"
                 onClick={() => handleInputChange(option.value)}
                 className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${
                   value === option.value
@@ -368,7 +407,7 @@ const GenerateProgramPage = () => {
           <Card className="bg-muted/50 border border-border p-4 mt-8">
             <h3 className="font-semibold mb-3 text-sm uppercase tracking-wide">Your Answers So Far:</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              {questions.slice(0, currentStep).map((q, index) => {
+              {questions.slice(0, currentStep).map((q) => {
                 const value = formData[q.id];
                 const displayValue = q.options 
                   ? q.options.find(opt => opt.value === value)?.label || value
